@@ -1040,12 +1040,27 @@ describe("hook announcement policy", () => {
         summary: "generic result",
       });
 
-      // Post with no explicit name — normalizeAgentPayload defaults to "Hook"
+      // Post with no explicit name; normalizeAgentPayload defaults to "Hook".
       const res = await postHook(port, "/hooks/agent", { message: "Do it" });
       expect(res.status).toBe(200);
       const events = await waitForSystemEvent();
       // Should be "Hook: generic result", NOT "Hook Hook: generic result"
       expect(events.some((e) => e.startsWith("Hook: "))).toBe(true);
+      expect(events.some((e) => e.includes("Hook Hook"))).toBe(false);
+      drainSystemEvents(resolveMainKey());
+    });
+  });
+
+  test("formats the generic catch-path prefix as Hook error instead of Hook Hook error", async () => {
+    testState.hooksConfig = { enabled: true, token: HOOK_TOKEN };
+    await withGatewayServer(async ({ port }) => {
+      cronIsolatedRun.mockClear();
+      cronIsolatedRun.mockRejectedValueOnce(new Error("runner failed"));
+
+      const res = await postHook(port, "/hooks/agent", { message: "Do it" });
+      expect(res.status).toBe(200);
+      const events = await waitForSystemEvent();
+      expect(events.some((e) => e.startsWith("Hook (error): Error: runner failed"))).toBe(true);
       expect(events.some((e) => e.includes("Hook Hook"))).toBe(false);
       drainSystemEvents(resolveMainKey());
     });
